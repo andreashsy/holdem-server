@@ -23,13 +23,9 @@
             window.user = "user" + number
             document.getElementById("user").innerHTML = " " + user
         }
-
-        let url = ''
-        if (location.protocol !== "https:") {
-            url = `ws://${window.location.host}/ws/socket-server`
-        } else {
-            url = `wss://${window.location.host}/ws/socket-server`
-        }
+        
+        var prot = (location.protocol === "https:") ? "wss" : "ws"
+        let url = `${prot}://${window.location.host}/ws/socket-server`
 
         const chatSocket = new WebSocket(url)
 
