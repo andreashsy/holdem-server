@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Holdem Lobby</title>
+</head>
+<body onload="init()">
+    <h1>Let's chat!<span id="user"></span></h1>
+
+    <form id="chat-form">
+        <input type="text" name="message"/>
+    </form>
+
+    <div id="messages">
+
+    </div>
+
+    <script type="text/javascript">
+        function init() {
+            var number = Math.floor(Math.random() * 10000)
+            window.user = "user" + number
+            document.getElementById("user").innerHTML = " " + user
+        }
+
+        let url = ''
+        if (location.protocol !== "https:") {
+            url = `ws://${window.location.host}/ws/socket-server`
+        } else {
+            url = `wss://${window.location.host}/ws/socket-server`
+        }
+
+        const chatSocket = new WebSocket(url)
+
+        chatSocket.onopen = function(e) {
+            chatSocket.send(
+                JSON.stringify({
+                    'userId': "Client-Server",
+                    'message': user + ' has connected!',
+                    'type': 'server_message'
+                })
+            )
+        }
+        
+        chatSocket.onmessage = function(e){
+            let data = JSON.parse(e.data)
+            console.log('Data: ', data)
+            
+            if(data.type === 'chat'){
+                let message = document.getElementById('messages')
+                
+                messages.insertAdjacentHTML('beforeend', `<div>
+                    <p>${data.userId}: ${data.message}</p>
+                    </div>`)
+            }
+        }
+            
+        chatSocket.onclose = function(e){
+            chatSocket.send(
+                JSON.stringify({
+                    'userId': 'Client-Server',
+                    'message': user + 'has disconnected!',
+                    'type': 'server_message'
+                })
+            )
+
+            chatSocket.close()
+        }
+
+        let chat_form = document.getElementById('chat-form')
+        chat_form.addEventListener('submit', (e)=> {
+            e.preventDefault()
+            let message = e.target.message.value
+            chatSocket.send(JSON.stringify({
+                'userId': user,
+                'message': message,
+                'type': 'message'
+            }))
+            chat_form.reset()
+        })
+        
+    </script>
+</body>
+</html>
