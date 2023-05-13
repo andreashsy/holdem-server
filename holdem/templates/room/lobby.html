@@ -7,21 +7,44 @@
     <title>Holdem Lobby</title>
 </head>
 <body onload="init()">
-    <h1>Let's chat!<span id="user"></span></h1>
+
+    <h1>Player Waiting Room</h1>
+    <div id="player-list"></div>
+    <button onclick="joinGame()">Join Room</button>
+    <button onclick="leaveGame()">Leave Room</button>
+
+    <h1>Let's chat,<span id="user"></span>!</h1>
 
     <form id="chat-form">
         <input type="text" name="message"/>
     </form>
 
-    <div id="messages">
-
-    </div>
+    <div id="messages"></div>
 
     <script type="text/javascript">
         function init() {
             var number = Math.floor(Math.random() * 10000)
             window.user = "user" + number
             document.getElementById("user").innerHTML = " " + user
+        }
+
+        function joinGame() {
+            chatSocket.send(
+                JSON.stringify({
+                    'userId': user,
+                    'message': '',
+                    'type': 'player_join'
+                })
+            )
+        }
+        function leaveGame() {
+            chatSocket.send(
+                JSON.stringify({
+                    'userId': user,
+                    'message': '',
+                    'type': 'player_leave'
+                })
+            )
         }
         
         var prot = (location.protocol === "https:") ? "wss" : "ws"
@@ -48,6 +71,14 @@
                 
                 messages.insertAdjacentHTML('beforeend', `<div>
                     <p>${data.userId}: ${data.message}</p>
+                    </div>`)
+                }
+                
+            if(data.type === 'waiting_room_update'){
+                let playerList = document.getElementById('player-list')
+                playerList.innerHTML = ''
+                playerList.insertAdjacentHTML('beforeend', `<div>
+                    <p>${data.message}</p>
                     </div>`)
             }
         }

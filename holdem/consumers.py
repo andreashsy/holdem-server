@@ -15,6 +15,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
         await self.accept()
 
+        if not cache.get('player_waiting_room'):
+            player_waiting_room = []
+            cache.set('player_waiting_room', player_waiting_room)
+        else:
+            waiting_room_list = cache.get('player_waiting_room')
+            await (self.channel_layer.group_send)(
+                self.room_group_name,
+                {
+                    'type':'waiting_room_update',
+                    'message': ", ".join(waiting_room_list),
+                    'userId': 'Server'
+                }
+            )
+
         print(f"{str(datetime.now())} - Group {self.room_group_name} has {len(self.channel_layer.groups.get(self.room_group_name, {}).items())} connection(s)")
         asyncio.create_task(self.wait_and_send_msg(3))
 
@@ -24,9 +38,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await (self.channel_layer.group_send)(
         self.room_group_name,
         {
-            'type':'chat_message',
+            'type':'server_message',
             'message':f"{seconds} seconds passed after login!",
-            'userId': "Server"
         }
     )
 
@@ -39,15 +52,71 @@ class ChatConsumer(AsyncWebsocketConsumer):
         user_id = text_data_json['userId']
         if not self.user_id and not msg_type == 'server_message':
             self.user_id = user_id
+        
+        if msg_type == 'player_join':
+            waiting_room_list = cache.get('player_waiting_room')
+            if user_id in waiting_room_list:
+                await (self.channel_layer.group_send)(
+                    self.room_group_name,
+                    {
+                        'type':'server_message',
+                        'message':user_id + ' is already in the room!',
+                }
+                )
+                return
 
-        await (self.channel_layer.group_send)(
-            self.room_group_name,
-            {
-                'type':'chat_message',
-                'message':message,
-                'userId': user_id
-            }
-        )
+            waiting_room_list.append(user_id)
+            cache.set('player_waiting_room', waiting_room_list)
+            await (self.channel_layer.group_send)(
+                self.room_group_name,
+                {
+                    'type':'waiting_room_update',
+                    'message': ", ".join(waiting_room_list),
+                    'userId': 'Server'
+                }
+            )
+        elif msg_type == 'player_leave':
+            waiting_room_list = cache.get('player_waiting_room')
+            if not user_id in waiting_room_list:
+                await (self.channel_layer.group_send)(
+                    self.room_group_name,
+                    {
+                        'type':'server_message',
+                        'message':user_id + ' is not in the room!',
+                }
+                )
+                return
+
+            waiting_room_list.remove(user_id)
+            cache.set('player_waiting_room', waiting_room_list)
+            await (self.channel_layer.group_send)(
+                self.room_group_name,
+                {
+                    'type':'waiting_room_update',
+                    'message': ", ".join(waiting_room_list),
+                    'userId': 'Server'
+                }
+            )
+            
+        else:
+            await (self.channel_layer.group_send)(
+                self.room_group_name,
+                {
+                    'type':'chat_message',
+                    'message':message,
+                    'userId': user_id
+                }
+            )
+
+    async def waiting_room_update(self, event):
+        user_id = event['userId']
+        message = event['message']
+
+        await self.send(text_data=json.dumps({
+            'type':'waiting_room_update',
+            'message': message,
+            'userId': user_id
+        }))
 
     async def chat_message(self, event):
         message = event['message']
