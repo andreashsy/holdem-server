@@ -4,6 +4,9 @@ from datetime import datetime
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core.cache import cache
 
+from .models.Game import HoldemGameState
+from .models.Player import HoldemPlayer
+
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_group_name = 'test'
@@ -30,7 +33,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
 
         print(f"{str(datetime.now())} - Group {self.room_group_name} has {len(self.channel_layer.groups.get(self.room_group_name, {}).items())} connection(s)")
-        asyncio.create_task(self.wait_and_send_msg(3))
+        # asyncio.create_task(self.wait_and_send_msg(3))
 
     async def wait_and_send_msg(self, seconds: int):
         await asyncio.sleep(seconds)
@@ -97,6 +100,32 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'userId': 'Server'
                 }
             )
+        elif msg_type == 'start_game':
+            waiting_room_list = cache.get('player_waiting_room')
+            if len(waiting_room_list) < 2:
+                # not enough players
+                return
+            if cache.get('holdem_game'):
+                # already a game in progress
+                return
+            cache.set('player_waiting_room', [])
+
+            # update waiting list
+            await (self.channel_layer.group_send)(
+                self.room_group_name,
+                {
+                    'type':'waiting_room_update',
+                    'message': "Game has started!",
+                    'userId': 'Server'
+                }
+            )
+            # start game
+            players = [HoldemPlayer(stack=100, id=player_id) for player_id in waiting_room_list]
+            holdem_game = HoldemGameState(players=players)
+            for player in holdem_game.players:
+                player.participate()
+            holdem_game.start_preflop()
+            cache.set('holdem_game', holdem_game)
             
         else:
             await (self.channel_layer.group_send)(
