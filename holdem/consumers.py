@@ -23,28 +23,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
             cache.set('player_waiting_room', player_waiting_room)
         else:
             waiting_room_list = cache.get('player_waiting_room')
-            await (self.channel_layer.group_send)(
-                self.room_group_name,
-                {
-                    'type':'waiting_room_update',
-                    'message': ", ".join(waiting_room_list),
-                    'userId': 'Server'
-                }
-            )
+            await self.send_waiting_room_update(message=", ".join(waiting_room_list))
 
         print(f"{str(datetime.now())} - Group {self.room_group_name} has {len(self.channel_layer.groups.get(self.room_group_name, {}).items())} connection(s)")
-        # asyncio.create_task(self.wait_and_send_msg(3))
+    #     asyncio.create_task(self.wait_and_send_msg(3))
 
-    async def wait_and_send_msg(self, seconds: int):
-        await asyncio.sleep(seconds)
+    # async def wait_and_send_msg(self, seconds: int):
+    #     await asyncio.sleep(seconds)
 
-        await (self.channel_layer.group_send)(
-        self.room_group_name,
-        {
-            'type':'server_message',
-            'message':f"{seconds} seconds passed after login!",
-        }
-    )
+    #     await (self.channel_layer.group_send)(
+    #     self.room_group_name,
+    #     {
+    #         'type':'server_message',
+    #         'message':f"{seconds} seconds passed after login!",
+    #     }
+    # )
 
     async def receive(self, text_data=None, bytes_data=None):
         text_data_json = json.loads(text_data)
@@ -59,47 +52,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if msg_type == 'player_join':
             waiting_room_list = cache.get('player_waiting_room')
             if user_id in waiting_room_list:
-                await (self.channel_layer.group_send)(
-                    self.room_group_name,
-                    {
-                        'type':'server_message',
-                        'message':user_id + ' is already in the room!',
-                }
-                )
+                await self.send_server_message(message=user_id + ' is already in the room!')
                 return
 
             waiting_room_list.append(user_id)
             cache.set('player_waiting_room', waiting_room_list)
-            await (self.channel_layer.group_send)(
-                self.room_group_name,
-                {
-                    'type':'waiting_room_update',
-                    'message': ", ".join(waiting_room_list),
-                    'userId': 'Server'
-                }
-            )
+            await self.send_waiting_room_update(message=", ".join(waiting_room_list))
+
         elif msg_type == 'player_leave':
             waiting_room_list = cache.get('player_waiting_room')
             if not user_id in waiting_room_list:
-                await (self.channel_layer.group_send)(
-                    self.room_group_name,
-                    {
-                        'type':'server_message',
-                        'message':user_id + ' is not in the room!',
-                }
-                )
+                await self.send_server_message(message=user_id + ' is not in the room!')
                 return
 
             waiting_room_list.remove(user_id)
             cache.set('player_waiting_room', waiting_room_list)
-            await (self.channel_layer.group_send)(
-                self.room_group_name,
-                {
-                    'type':'waiting_room_update',
-                    'message': ", ".join(waiting_room_list),
-                    'userId': 'Server'
-                }
-            )
+            await self.send_waiting_room_update(message=", ".join(waiting_room_list))
+
         elif msg_type == 'start_game':
             waiting_room_list = cache.get('player_waiting_room')
             if len(waiting_room_list) < 2:
@@ -111,14 +80,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             cache.set('player_waiting_room', [])
 
             # update waiting list
-            await (self.channel_layer.group_send)(
-                self.room_group_name,
-                {
-                    'type':'waiting_room_update',
-                    'message': "Game has started!",
-                    'userId': 'Server'
-                }
-            )
+            await self.send_waiting_room_update(message="Game has started")
+           
             # start game
             players = [HoldemPlayer(stack=100, id=player_id) for player_id in waiting_room_list]
             holdem_game = HoldemGameState(players=players)
@@ -128,14 +91,37 @@ class ChatConsumer(AsyncWebsocketConsumer):
             cache.set('holdem_game', holdem_game)
             
         else:
-            await (self.channel_layer.group_send)(
-                self.room_group_name,
-                {
-                    'type':'chat_message',
-                    'message':message,
-                    'userId': user_id
-                }
-            )
+            await self.send_chat_message(user_id, message)
+
+    async def send_chat_message(self, user_id:str, message:str):
+        await (self.channel_layer.group_send)(
+            self.room_group_name,
+            {
+                'type':'chat_message',
+                'message':message,
+                'userId': user_id
+            }
+        )
+
+    async def chat_message(self, event):
+        message = event['message']
+        user_id = event['userId']
+
+        await self.send(text_data=json.dumps({
+            'type':'chat',
+            'message':message,
+            'userId': user_id
+        }))
+
+    async def send_waiting_room_update(self, message:str):
+        await (self.channel_layer.group_send)(
+            self.room_group_name,
+            {
+                'type':'waiting_room_update',
+                'message': message,
+                'userId': 'Server'
+            }
+        )
 
     async def waiting_room_update(self, event):
         user_id = event['userId']
@@ -147,15 +133,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'userId': user_id
         }))
 
-    async def chat_message(self, event):
-        message = event['message']
-        user_id = event['userId']
-
-        await self.send(text_data=json.dumps({
-            'type':'chat',
-            'message':message,
-            'userId': user_id
-        }))
+    async def send_server_message(self, message):
+        await (self.channel_layer.group_send)(
+            self.room_group_name,
+            {
+                'type':'server_message',
+                'message':message,
+        })
 
     async def server_message(self, event):
         message = event['message']
