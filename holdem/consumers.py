@@ -46,8 +46,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         msg_type = text_data_json['type']
         message = text_data_json['message']
         user_id = text_data_json['userId']
-        
-        if not self.user_id and not msg_type == 'server_message':
+
+        if not self.user_id and msg_type == 'server_message':
             self.user_id = user_id
         
         if msg_type == 'player_join':
@@ -58,6 +58,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         elif msg_type == 'start_game':
             await self.handle_start_game()
+
+        elif msg_type == 'server_message':
+            await self.send_server_message(message)
             
         else:
             await self.send_chat_message(user_id, message)
