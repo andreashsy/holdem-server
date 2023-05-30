@@ -62,8 +62,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         elif msg_type == 'server_message':
             await self.send_server_message(message)
             
-        else:
+        elif msg_type == 'message':
             await self.send_chat_message(user_id, message)
+
+        else:
+            print(f'{str(datetime.now())} - Message not handled! ', text_data_json)
 
     async def handle_player_join(self, user_id:str):
         waiting_room_list = cache.get('player_waiting_room')
